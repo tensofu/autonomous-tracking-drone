@@ -26,7 +26,7 @@ A drone simulation and ground-control stack on macOS (Apple Silicon):
 
 ```bash
 git clone --recurse-submodules <this-repo>
-cd DroneProject
+cd autonomous-tracking-drone
 ```
 
 ### 2. System dependencies (Homebrew)
@@ -51,8 +51,8 @@ mkdir -p ~/.mavproxy                # first-run quirk of mavproxy --version
 # gz-transport must be pinned to loopback: VPN interfaces (Tailscale etc.)
 # otherwise break Gazebo server<->GUI comms (blank or stale GUI windows)
 export GZ_IP=127.0.0.1
-export GZ_SIM_SYSTEM_PLUGIN_PATH=$HOME/CodingProjects/DroneProject/third_party/ardupilot_gazebo/build
-export GZ_SIM_RESOURCE_PATH=$HOME/CodingProjects/DroneProject/third_party/ardupilot_gazebo/models:$HOME/CodingProjects/DroneProject/third_party/ardupilot_gazebo/worlds
+export GZ_SIM_SYSTEM_PLUGIN_PATH=$HOME/CodingProjects/autonomous-tracking-drone/third_party/ardupilot_gazebo/build
+export GZ_SIM_RESOURCE_PATH=$HOME/CodingProjects/autonomous-tracking-drone/third_party/ardupilot_gazebo/models:$HOME/CodingProjects/autonomous-tracking-drone/third_party/ardupilot_gazebo/worlds
 ```
 
 If you set `CPLUS_INCLUDE_PATH` anywhere, make sure it never ends with a
