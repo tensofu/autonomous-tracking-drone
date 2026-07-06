@@ -1,13 +1,10 @@
-# DroneProject
+# Autonomous Tracking Drone Project
 
-A complete drone simulation and ground-control stack on macOS (Apple Silicon):
+A drone simulation and ground-control stack on macOS (Apple Silicon):
 
-- **ArduPilot SITL** — the real ArduCopter flight controller firmware, compiled
-  for the host and run as a software-in-the-loop simulation
-- **Gazebo Harmonic** — 3D physics and visual simulation of an iris quadcopter
-  (with gimbal camera) flying on a runway
-- **Custom ground station** — a pygame GUI with live telemetry, a moving map,
-  preprogrammed flight paths, and the drone's camera feed decoded over RTP
+- **ArduPilot SITL** — the real ArduCopter flight controller firmware, compiled for the host and run as a software-in-the-loop simulation
+- **Gazebo Harmonic** — 3D physics and visual simulation of an iris quadcopter (with gimbal camera) flying on a runway
+- **Custom ground station** — a Python (pygame) GUI with live telemetry, a moving map, preprogrammed flight paths, and the drone's camera feed decoded over RTP
 
 ```
 ├── src/                    ground-station source
