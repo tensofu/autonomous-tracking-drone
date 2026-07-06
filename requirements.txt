@@ -1,0 +1,18 @@
+# ArduPilot SITL build + sim_vehicle.py
+empy==3.3.4
+pexpect
+future
+dronecan
+pymavlink
+MAVProxy
+gnureadline        # MAVProxy line editing on macOS
+
+# MAVProxy GUI modules (--console, --map)
+wxPython
+matplotlib
+pillow
+
+# ground station (src/drone_gui.py)
+pygame-ce          # NOT pygame: its font module is broken on Python 3.14
+opencv-python      # camera feed decode (bundles FFmpeg)
+numpy
