@@ -17,7 +17,7 @@ A drone simulation and ground-control stack on macOS (Apple Silicon):
 │   └── ardupilot_gazebo/   Gazebo <-> ArduPilot bridge plugin + models/worlds
 ├── patches/                local patches applied to submodule working trees
 ├── requirements.txt        Python dependencies (venv)
-└── venv/                   Python 3.14 virtualenv (not committed)
+└── venv/                   Python virtualenv (created during setup, not committed)
 ```
 
 ## Setup from scratch
@@ -25,9 +25,11 @@ A drone simulation and ground-control stack on macOS (Apple Silicon):
 ### 1. Clone with submodules
 
 ```bash
-git clone --recurse-submodules <this-repo>
+git clone --recurse-submodules https://github.com/tensofu/autonomous-tracking-drone.git
 cd autonomous-tracking-drone
 ```
+
+All commands below are run from this directory unless stated otherwise.
 
 ### 2. System dependencies (Homebrew)
 
@@ -39,39 +41,49 @@ brew install gz-harmonic rapidjson opencv gstreamer qt@5 cmake ccache
 
 ### 3. Python environment
 
+Requires Python 3.11+ (tested on 3.14).
+
 ```bash
 python3 -m venv venv
 ./venv/bin/pip install -r requirements.txt
-mkdir -p ~/.mavproxy                # first-run quirk of mavproxy --version
+mkdir -p ~/.mavproxy                # works around a MAVProxy first-run quirk
 ```
 
 ### 4. Shell environment (`~/.zshrc`)
 
+Add the following, with the first line adjusted to wherever you cloned the
+repository:
+
 ```bash
+export DRONE_SIM_HOME="$HOME/autonomous-tracking-drone"   # <-- your clone path
+
 # gz-transport must be pinned to loopback: VPN interfaces (Tailscale etc.)
 # otherwise break Gazebo server<->GUI comms (blank or stale GUI windows)
 export GZ_IP=127.0.0.1
-export GZ_SIM_SYSTEM_PLUGIN_PATH=$HOME/CodingProjects/autonomous-tracking-drone/third_party/ardupilot_gazebo/build
-export GZ_SIM_RESOURCE_PATH=$HOME/CodingProjects/autonomous-tracking-drone/third_party/ardupilot_gazebo/models:$HOME/CodingProjects/autonomous-tracking-drone/third_party/ardupilot_gazebo/worlds
+export GZ_SIM_SYSTEM_PLUGIN_PATH="$DRONE_SIM_HOME/third_party/ardupilot_gazebo/build"
+export GZ_SIM_RESOURCE_PATH="$DRONE_SIM_HOME/third_party/ardupilot_gazebo/models:$DRONE_SIM_HOME/third_party/ardupilot_gazebo/worlds"
 ```
 
-If you set `CPLUS_INCLUDE_PATH` anywhere, make sure it never ends with a
-trailing colon — an empty entry means "current directory" as a *system*
-include path, which silently shadows generated headers and breaks the
-ArduPilot build (`AP_BUILD_ROOT` undeclared in `SIM_AIS.cpp`). Safe form:
+Then open a new terminal (or `source ~/.zshrc`).
 
-```bash
-export CPLUS_INCLUDE_PATH="/opt/homebrew/opt/llvm/include${CPLUS_INCLUDE_PATH:+:$CPLUS_INCLUDE_PATH}"
-```
+> **Note:** if your shell config sets `CPLUS_INCLUDE_PATH` anywhere, make sure
+> it never ends with a trailing colon — an empty entry means "current
+> directory" as a *system* include path, which silently shadows generated
+> headers and breaks the ArduPilot build (`AP_BUILD_ROOT` undeclared in
+> `SIM_AIS.cpp`). Safe form:
+>
+> ```bash
+> export CPLUS_INCLUDE_PATH="/opt/homebrew/opt/llvm/include${CPLUS_INCLUDE_PATH:+:$CPLUS_INCLUDE_PATH}"
+> ```
 
 ### 5. Build ArduCopter SITL
 
 ```bash
+source venv/bin/activate
 cd third_party/ardupilot
-../../venv/bin/python -m pip --version   # sanity: venv exists
-source ../../venv/bin/activate
 ./waf configure --board sitl
 ./waf copter
+cd ../..
 ```
 
 ### 6. Build the Gazebo plugin
@@ -83,6 +95,7 @@ mkdir build && cd build
 GZ_VERSION=harmonic cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo \
     -DCMAKE_PREFIX_PATH=/opt/homebrew/opt/qt@5
 make -j8
+cd ../../..
 ```
 
 (`qt@5` is keg-only, hence the explicit prefix path. OpenCV and GStreamer are
@@ -90,7 +103,8 @@ hard requirements of the plugin's CMakeLists despite looking optional.)
 
 ## Running the simulation
 
-Four terminals (or background the first two):
+Four terminals (or background the first two), all with the environment from
+setup step 4:
 
 ```bash
 # 1. Gazebo server (physics; macOS cannot run server+GUI in one process)
@@ -99,11 +113,12 @@ gz sim -v4 -s -r iris_runway.sdf
 # 2. Gazebo GUI (3D view; start after the server)
 gz sim -g
 
-# 3. ArduPilot SITL + MAVProxy
-cd third_party/ardupilot && source ../../venv/bin/activate
+# 3. ArduPilot SITL + MAVProxy (from the repository root)
+source venv/bin/activate
+cd third_party/ardupilot
 ./Tools/autotest/sim_vehicle.py -v ArduCopter -f gazebo-iris --model JSON --console --map
 
-# 4. Ground station GUI
+# 4. Ground station GUI (from the repository root)
 source venv/bin/activate
 python src/drone_gui.py
 ```
@@ -151,15 +166,15 @@ RTP to `udp://127.0.0.1:5600`. OpenCV's bundled FFmpeg decodes it via
 `src/camera_stream.sdp`; frames land in the GUI's camera panel with a frame
 counter. Hook detection code into `CameraFeed._pump()` in `drone_gui.py`.
 
-## Troubleshooting (hard-won)
+## Troubleshooting
 
 | Symptom | Cause / fix |
 | --- | --- |
-| Build fails: `AP_BUILD_ROOT` undeclared | `CPLUS_INCLUDE_PATH` ends with a colon — see setup step 4 |
+| Build fails: `AP_BUILD_ROOT` undeclared | `CPLUS_INCLUDE_PATH` ends with a colon — see the note in setup step 4 |
 | Gazebo GUI window transparent/blank | `GZ_IP=127.0.0.1` missing (VPN interfaces break gz-transport); set it for **both** server and GUI |
 | GUI shows drone parked while telemetry says flying (or vice versa) | Same `GZ_IP` issue: a half-connected GUI renders stale poses. Restart the GUI with the env set. Trust `gz topic -e -t /world/iris_runway/dynamic_pose/info -n 1` over the GUI |
-| `PreArm: Motors: Check frame class and type` after `-w` wipe | `--model JSON` bypasses frame default params in this ArduPilot version. `param set FRAME_CLASS 1` + `reboot`, or wipe with `--add-param-file Tools/autotest/default_params/copter.parm --add-param-file Tools/autotest/default_params/gazebo-iris.parm` |
-| pygame crashes: "SDL downgrade" | A global `DYLD_LIBRARY_PATH` (e.g. Vulkan SDK) injects an old libSDL2; `drone_gui.py` strips it and re-execs itself automatically |
+| `PreArm: Motors: Check frame class and type` after a `-w` wipe | `--model JSON` bypasses frame default params in current ArduPilot. `param set FRAME_CLASS 1` + `reboot`, or wipe with `--add-param-file Tools/autotest/default_params/copter.parm --add-param-file Tools/autotest/default_params/gazebo-iris.parm` |
+| pygame crashes: "SDL downgrade" | A global `DYLD_LIBRARY_PATH` (e.g. from a Vulkan SDK install) injects an old libSDL2; `drone_gui.py` strips it and re-execs itself automatically |
 | Ground station says links lost forever | Another GUI instance holds the ports (one `udpin:14550` bind, one `tcp:5762` client). Kill duplicates |
 | Copter descends in LOITER with no RC | Pilot modes follow the RC throttle, which reads low with no input. Use GUIDED (the GUI's HOLD does) |
-| `sim_vehicle.py` behaves oddly | Bare `sim_vehicle.py` may resolve to another ArduPilot checkout on PATH; always run `./Tools/autotest/sim_vehicle.py` from `third_party/ardupilot` |
+| `sim_vehicle.py` behaves oddly | Bare `sim_vehicle.py` may resolve to a different ArduPilot checkout if one is on your PATH; always run `./Tools/autotest/sim_vehicle.py` from `third_party/ardupilot` |
