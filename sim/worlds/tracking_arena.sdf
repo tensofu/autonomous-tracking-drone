@@ -1,0 +1,179 @@
+<?xml version="1.0" ?>
+<!--
+  Tracking arena: iris_runway plus
+    - landing_dock with AprilTag 36h11 id 0   (camera precision landing)
+    - "person": red cylinder actor walking a loop inside the courtyard
+    - hazard-yellow walls (U-shaped courtyard) and obstacles to avoid
+
+  Gazebo axes: +X east, +Y north. ArduPilot NED: north = +Y, east = +X.
+-->
+<sdf version="1.9">
+  <world name="tracking_arena">
+    <physics name="1ms" type="ignore">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+
+    <plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics"/>
+    <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+    <plugin filename="gz-sim-user-commands-system" name="gz::sim::systems::UserCommands"/>
+    <plugin filename="gz-sim-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster"/>
+    <plugin filename="gz-sim-imu-system" name="gz::sim::systems::Imu"/>
+    <plugin filename="gz-sim-navsat-system" name="gz::sim::systems::NavSat"/>
+
+    <scene>
+      <ambient>1.0 1.0 1.0</ambient>
+      <background>0.8 0.8 0.8</background>
+      <sky></sky>
+    </scene>
+
+    <spherical_coordinates>
+      <latitude_deg>-35.363262</latitude_deg>
+      <longitude_deg>149.165237</longitude_deg>
+      <elevation>584</elevation>
+      <heading_deg>0</heading_deg>
+      <surface_model>EARTH_WGS84</surface_model>
+    </spherical_coordinates>
+
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.8 0.8 0.8 1</specular>
+      <attenuation>
+        <range>1000</range>
+        <constant>0.9</constant>
+        <linear>0.01</linear>
+        <quadratic>0.001</quadratic>
+      </attenuation>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <include>
+      <uri>model://runway</uri>
+      <pose degrees="true">-29 545 0 0 0 363</pose>
+    </include>
+
+    <include>
+      <uri>model://iris_with_gimbal</uri>
+      <pose degrees="true">0 0 0.01 0 0 90</pose>
+    </include>
+
+    <!-- landing dock: NED (north -6, east 6) -->
+    <include>
+      <uri>model://landing_dock</uri>
+      <pose>6 -6 0.15 0 0 0</pose>
+    </include>
+
+    <!-- U-shaped courtyard, opening faces the drone (west). hazard yellow -->
+    <model name="wall_back">
+      <static>true</static>
+      <pose>28 0 1.25 0 0 0</pose>
+      <link name="link">
+        <collision name="col"><geometry><box><size>0.2 16 2.5</size></box></geometry></collision>
+        <visual name="vis">
+          <geometry><box><size>0.2 16 2.5</size></box></geometry>
+          <material>
+            <ambient>1.0 0.75 0.0 1</ambient>
+            <diffuse>1.0 0.8 0.05 1</diffuse>
+            <specular>0.05 0.05 0.05 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="wall_north">
+      <static>true</static>
+      <pose>23 8 1.25 0 0 0</pose>
+      <link name="link">
+        <collision name="col"><geometry><box><size>10 0.2 2.5</size></box></geometry></collision>
+        <visual name="vis">
+          <geometry><box><size>10 0.2 2.5</size></box></geometry>
+          <material>
+            <ambient>1.0 0.75 0.0 1</ambient>
+            <diffuse>1.0 0.8 0.05 1</diffuse>
+            <specular>0.05 0.05 0.05 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="wall_south">
+      <static>true</static>
+      <pose>23 -8 1.25 0 0 0</pose>
+      <link name="link">
+        <collision name="col"><geometry><box><size>10 0.2 2.5</size></box></geometry></collision>
+        <visual name="vis">
+          <geometry><box><size>10 0.2 2.5</size></box></geometry>
+          <material>
+            <ambient>1.0 0.75 0.0 1</ambient>
+            <diffuse>1.0 0.8 0.05 1</diffuse>
+            <specular>0.05 0.05 0.05 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- freestanding obstacles between the drone and the courtyard -->
+    <model name="obstacle_box">
+      <static>true</static>
+      <pose>14 3 0.75 0 0 0.3</pose>
+      <link name="link">
+        <collision name="col"><geometry><box><size>1.5 1.5 1.5</size></box></geometry></collision>
+        <visual name="vis">
+          <geometry><box><size>1.5 1.5 1.5</size></box></geometry>
+          <material>
+            <ambient>1.0 0.75 0.0 1</ambient>
+            <diffuse>1.0 0.8 0.05 1</diffuse>
+            <specular>0.05 0.05 0.05 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+    <model name="obstacle_pillar">
+      <static>true</static>
+      <pose>12 -4 1.0 0 0 0</pose>
+      <link name="link">
+        <collision name="col"><geometry><cylinder><radius>0.6</radius><length>2.0</length></cylinder></geometry></collision>
+        <visual name="vis">
+          <geometry><cylinder><radius>0.6</radius><length>2.0</length></cylinder></geometry>
+          <material>
+            <ambient>1.0 0.75 0.0 1</ambient>
+            <diffuse>1.0 0.8 0.05 1</diffuse>
+            <specular>0.05 0.05 0.05 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- "person": bright red 1.7 m cylinder circling the courtyard at
+         walking pace (0.8 m/s, r ~2.7 m). stand-in for a human so the sim
+         vision can use color segmentation; the real drone swaps this for
+         the AI camera's person detections. VelocityControl drives it
+         kinematically; gravity off so it glides at constant height -->
+    <model name="person">
+      <pose>21 0 0.86 0 0 0</pose>
+      <link name="body">
+        <gravity>false</gravity>
+        <inertial>
+          <mass>70</mass>
+          <inertia><ixx>18</ixx><iyy>18</iyy><izz>2.2</izz></inertia>
+        </inertial>
+        <visual name="vis">
+          <geometry><cylinder><radius>0.25</radius><length>1.7</length></cylinder></geometry>
+          <material>
+            <ambient>0.9 0.05 0.05 1</ambient>
+            <diffuse>1.0 0.05 0.05 1</diffuse>
+            <specular>0.2 0.2 0.2 1</specular>
+          </material>
+        </visual>
+      </link>
+      <plugin filename="gz-sim-velocity-control-system"
+              name="gz::sim::systems::VelocityControl">
+        <initial_linear>0.8 0 0</initial_linear>
+        <initial_angular>0 0 0.3</initial_angular>
+      </plugin>
+    </model>
+
+  </world>
+</sdf>

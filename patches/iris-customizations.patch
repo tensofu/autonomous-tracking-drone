@@ -1,0 +1,554 @@
+diff --git a/models/iris_with_gimbal/model.sdf b/models/iris_with_gimbal/model.sdf
+index dae756d..2ccab9d 100755
+--- a/models/iris_with_gimbal/model.sdf
++++ b/models/iris_with_gimbal/model.sdf
+@@ -5,24 +5,6 @@
+       <uri>model://iris_with_standoffs</uri>
+     </include>
+ 
+-    <include>
+-      <uri>model://gimbal_small_3d</uri>
+-      <name>gimbal</name>
+-      <pose degrees="true">0 -0.01 -0.124923 90 0 90</pose>    
+-    </include>
+-
+-    <joint name="gimbal_joint" type="revolute">
+-      <parent>iris_with_standoffs::base_link</parent>
+-      <child>gimbal::base_link</child>
+-      <axis>
+-        <limit>
+-          <lower>0</lower>
+-          <upper>0</upper>
+-        </limit>
+-        <xyz>0 0 1</xyz>
+-      </axis>
+-    </joint>
+-
+     <!-- plugins -->
+     <plugin filename="gz-sim-joint-state-publisher-system"
+       name="gz::sim::systems::JointStatePublisher">
+@@ -281,64 +263,6 @@
+         <controlVelocitySlowdownSim>1</controlVelocitySlowdownSim>
+       </control>
+ 
+-      <!-- roll range is -30 to +30 deg -->
+-      <control channel="8">
+-        <jointName>gimbal::roll_joint</jointName>
+-        <multiplier>1.047197551196</multiplier>
+-        <offset>-0.5</offset>
+-        <servo_min>1100</servo_min>
+-        <servo_max>1900</servo_max>
+-        <type>COMMAND</type>
+-        <cmd_topic>/gimbal/cmd_roll</cmd_topic>
+-        <p_gain>2</p_gain>
+-      </control>
+-
+-      <!-- pitch range is -135 to +45 deg -->
+-      <control channel="9">
+-        <jointName>gimbal::pitch_joint</jointName>
+-        <multiplier>-3.14159265</multiplier>
+-        <offset>-0.75</offset>
+-        <servo_min>1100</servo_min>
+-        <servo_max>1900</servo_max>
+-        <type>COMMAND</type>
+-        <cmd_topic>/gimbal/cmd_pitch</cmd_topic>
+-        <p_gain>2</p_gain>
+-      </control>
+-
+-      <!-- yaw range is -160 to +160 deg -->
+-      <control channel="10">
+-        <jointName>gimbal::yaw_joint</jointName>
+-        <multiplier>-5.5850536</multiplier>
+-        <offset>-0.5</offset>
+-        <servo_min>1100</servo_min>
+-        <servo_max>1900</servo_max>
+-        <type>COMMAND</type>
+-        <cmd_topic>/gimbal/cmd_yaw</cmd_topic>
+-        <p_gain>2</p_gain>
+-      </control>
+-
+-    </plugin>
+-
+-    <plugin
+-      filename="gz-sim-joint-position-controller-system"
+-      name="gz::sim::systems::JointPositionController">
+-      <joint_name>gimbal::roll_joint</joint_name>
+-      <topic>/gimbal/cmd_roll</topic>
+-      <p_gain>2</p_gain>
+-    </plugin>
+-    <plugin
+-      filename="gz-sim-joint-position-controller-system"
+-      name="gz::sim::systems::JointPositionController">
+-      <joint_name>gimbal::pitch_joint</joint_name>
+-      <topic>/gimbal/cmd_pitch</topic>
+-      <p_gain>2</p_gain>
+-    </plugin>
+-    <plugin
+-      filename="gz-sim-joint-position-controller-system"
+-      name="gz::sim::systems::JointPositionController">
+-      <joint_name>gimbal::yaw_joint</joint_name>
+-      <topic>/gimbal/cmd_yaw</topic>
+-      <p_gain>2</p_gain>
+     </plugin>
+ 
+   </model>
+diff --git a/models/iris_with_standoffs/model.sdf b/models/iris_with_standoffs/model.sdf
+index ce0cc3a..bb1c4b7 100755
+--- a/models/iris_with_standoffs/model.sdf
++++ b/models/iris_with_standoffs/model.sdf
+@@ -7,116 +7,45 @@
+         <linear>0.0</linear>
+         <angular>0.0</angular>
+       </velocity_decay>
++      <!-- mass 1062g measured by user (real hardware). Inertia computed
++           directly from the flightstack.STL mesh (uniform-density
++           assumption - no per-component material data available),
++           validated against an analytic box case before use; see
++           patches/iris-flightstack-body.patch for the derivation. CoM
++           position is in the link frame (same leg-tip anchor as
++           base_visual), not the origin - off-axis by <2mm in X/Y (the
++           mesh is very nearly symmetric) and ~90mm up in Z. -->
+       <inertial>
+-        <pose>0 0 0 0 0 0</pose>
+-        <mass>1.5</mass>
++        <pose>-0.00179 -0.0000178 0.08981 0 0 0</pose>
++        <mass>1.062</mass>
+         <inertia>
+-          <ixx>0.008</ixx>
+-          <ixy>0</ixy>
+-          <ixz>0</ixz>
+-          <iyy>0.015</iyy>
+-          <iyz>0</iyz>
+-          <izz>0.017</izz>
++          <ixx>0.0082654</ixx>
++          <ixy>0.0000033</ixy>
++          <ixz>-0.0000070</ixz>
++          <iyy>0.0045229</iyy>
++          <iyz>0.0000269</iyz>
++          <izz>0.0110494</izz>
+         </inertia>
+       </inertial>
++      <!-- BODY: imported flightstack.STL v3 (Y-up in the raw file again,
++           now with baked-in landing-gear legs and propeller blades - see
++           README "Custom drone body"). Legs are the STL's OWN geometry
++           now; the earlier placeholder cylinder legs are gone - the
++           mesh's own legs (bottom at raw local Y=0.67mm, i.e. essentially
++           the mesh origin) provide the actual ground contact. Link origin
++           is anchored so those leg tips sit at exactly link Z=0. dartsim
++           doesn't support mesh collision on a dynamic link, hence the box
++           approximation (sized to the full measured bounding box, offset
++           by bbox-center-minus-anchor). Horizontal (X/Y) placement is
++           centered on the mesh's measured rotational symmetry point (the
++           mean of its 4 propeller hub positions, ~163.2/221.6mm in the
++           raw file's X/Z) - see patches/iris-flightstack-body.patch. -->
+       <collision name='base_collision'>
+-        <pose>0 0 0 0 0 0</pose>
+-        <geometry>
+-          <mesh>
+-            <uri>model://iris_with_standoffs/meshes/iris_collision.stl</uri>
+-          </mesh>
+-        </geometry>
+-        <surface>
+-          <contact>
+-            <ode>
+-              <max_vel>100.0</max_vel>
+-              <min_depth>0.001</min_depth>
+-            </ode>
+-          </contact>
+-          <friction>
+-            <ode>
+-              <mu>100000.0</mu>
+-              <mu2>100000.0</mu2>
+-            </ode>
+-          </friction>
+-        </surface>
+-      </collision>
+-      <collision name='front_left_leg_collision'>
+-        <pose>0.123 0.22 -0.11 0 0 0</pose>
+-        <geometry>
+-          <cylinder>
+-            <radius>0.005</radius>
+-            <length>0.17</length>
+-          </cylinder>
+-        </geometry>
+-        <surface>
+-          <contact>
+-            <ode>
+-              <max_vel>100.0</max_vel>
+-              <min_depth>0.001</min_depth>
+-            </ode>
+-          </contact>
+-          <friction>
+-            <ode>
+-              <mu>100000.0</mu>
+-              <mu2>100000.0</mu2>
+-            </ode>
+-          </friction>
+-        </surface>
+-      </collision>
+-      <collision name='front_right_leg_collision'>
+-        <pose>0.123 -0.22 -0.11 0 0 0</pose>
++        <pose>0.01718 -0.00018 0.07454 0 0 0</pose>
+         <geometry>
+-          <cylinder>
+-            <radius>0.005</radius>
+-            <length>0.17</length>
+-          </cylinder>
+-        </geometry>
+-        <surface>
+-          <contact>
+-            <ode>
+-              <max_vel>100.0</max_vel>
+-              <min_depth>0.001</min_depth>
+-            </ode>
+-          </contact>
+-          <friction>
+-            <ode>
+-              <mu>100000.0</mu>
+-              <mu2>100000.0</mu2>
+-            </ode>
+-          </friction>
+-        </surface>
+-      </collision>
+-      <collision name='rear_left_leg_collision'>
+-        <pose>-0.140 0.21 -0.11 0 0 0</pose>
+-        <geometry>
+-          <cylinder>
+-            <radius>0.005</radius>
+-            <length>0.17</length>
+-          </cylinder>
+-        </geometry>
+-        <surface>
+-          <contact>
+-            <ode>
+-              <max_vel>100.0</max_vel>
+-              <min_depth>0.001</min_depth>
+-            </ode>
+-          </contact>
+-          <friction>
+-            <ode>
+-              <mu>100000.0</mu>
+-              <mu2>100000.0</mu2>
+-            </ode>
+-          </friction>
+-        </surface>
+-      </collision>
+-      <collision name='rear_right_leg_collision'>
+-        <pose>-0.140 -0.21 -0.11 0 0 0</pose>
+-        <geometry>
+-          <cylinder>
+-            <radius>0.005</radius>
+-            <length>0.17</length>
+-          </cylinder>
++          <box>
++            <size>0.35711 0.43797 0.14908</size>
++          </box>
+         </geometry>
+         <surface>
+           <contact>
+@@ -135,14 +64,20 @@
+       </collision>
+ 
+       <visual name='base_visual'>
++        <!-- Y-up correction: +90 deg roll remaps local Y (up in the file)
++             to world Z. Translation anchors the mesh's own leg tips
++             (raw local Y=0.67mm) to link Z=0, and centers the rotational
++             symmetry point in X/Y - see patch notes for the derivation. -->
++        <pose degrees="true">-0.16323 0.22158 -0.00067 90 0 0</pose>
+         <geometry>
+           <mesh>
+-            <uri>model://iris_with_standoffs/meshes/iris.dae</uri>
++            <uri>model://flightstack/meshes/flightstack.stl</uri>
++            <scale>0.001 0.001 0.001</scale>
+           </mesh>
+         </geometry>
+         <material>
+-          <ambient>0.05 0.05 0.05</ambient>
+-          <diffuse>0.05 0.05 0.05</diffuse>
++          <ambient>0.9 0.35 0.05</ambient>
++          <diffuse>1.0 0.45 0.1</diffuse>
+           <specular>1 1 1 1</specular>
+           <pbr>
+             <metal>
+@@ -152,86 +87,36 @@
+           </pbr>
+         </material>
+       </visual>
+-      <visual name='front_left_leg_visual'>
+-        <pose>0.123 0.22 -0.11 0 0 0</pose>
+-        <geometry>
+-          <cylinder>
+-            <radius>0.005</radius>
+-            <length>0.17</length>
+-          </cylinder>
+-        </geometry>
+-        <material>
+-          <ambient>0.05 0.05 0.05</ambient>
+-          <diffuse>0.05 0.05 0.05</diffuse>
+-          <specular>0.01 0.01 0.01 1.0</specular>
+-          <pbr>
+-            <metal>
+-              <metalness>0.5</metalness>
+-              <roughness>0.5</roughness>
+-            </metal>
+-          </pbr>
+-        </material>
+-      </visual>
+-      <visual name='front_right_leg_visual'>
+-        <pose>0.123 -0.22 -0.11 0 0 0</pose>
+-        <geometry>
+-          <cylinder>
+-            <radius>0.005</radius>
+-            <length>0.17</length>
+-          </cylinder>
+-        </geometry>
+-        <material>
+-          <ambient>0.05 0.05 0.05</ambient>
+-          <diffuse>0.05 0.05 0.05</diffuse>
+-          <specular>0.01 0.01 0.01 1.0</specular>
+-          <pbr>
+-            <metal>
+-              <metalness>0.5</metalness>
+-              <roughness>0.5</roughness>
+-            </metal>
+-          </pbr>
+-        </material>
+-      </visual>
+-      <visual name='rear_left_leg_visual'>
+-        <pose>-0.140 0.21 -0.11 0 0 0</pose>
+-        <geometry>
+-          <cylinder>
+-            <radius>0.005</radius>
+-            <length>0.17</length>
+-          </cylinder>
+-        </geometry>
+-        <material>
+-          <ambient>0.05 0.05 0.05</ambient>
+-          <diffuse>0.05 0.05 0.05</diffuse>
+-          <specular>0.01 0.01 0.01 1.0</specular>
+-          <pbr>
+-            <metal>
+-              <metalness>0.5</metalness>
+-              <roughness>0.5</roughness>
+-            </metal>
+-          </pbr>
+-        </material>
+-      </visual>
+-      <visual name='rear_right_leg_visual'>
+-        <pose>-0.140 -0.21 -0.11 0 0 0</pose>
+-        <geometry>
+-          <cylinder>
+-            <radius>0.005</radius>
+-            <length>0.17</length>
+-          </cylinder>
+-        </geometry>
+-        <material>
+-          <ambient>0.05 0.05 0.05</ambient>
+-          <diffuse>0.05 0.05 0.05</diffuse>
+-          <specular>0.01 0.01 0.01 1.0</specular>
+-          <pbr>
+-            <metal>
+-              <metalness>0.5</metalness>
+-              <roughness>0.5</roughness>
+-            </metal>
+-          </pbr>
+-        </material>
+-      </visual>
++      <!-- fixed nadir camera, centered under the body (replaces the
++           3-axis gimbal_small_3d rig removed from iris_with_gimbal).
++           No moving parts - always looks straight down. -->
++      <sensor name="camera" type="camera">
++        <gz_frame_id>base_link</gz_frame_id>
++        <!-- link origin is now anchored at the leg tips (ground level),
++             so this sits just above ground between the legs rather than
++             below the whole body as before -->
++        <pose>0 0 0.03 0 1.5708 0</pose>
++        <camera>
++          <horizontal_fov>2.0</horizontal_fov>
++          <image>
++            <width>640</width>
++            <height>480</height>
++          </image>
++          <clip>
++            <near>0.05</near>
++            <far>15000</far>
++          </clip>
++        </camera>
++        <always_on>1</always_on>
++        <update_rate>10</update_rate>
++        <visualize>1</visualize>
++        <plugin name="GstCameraPlugin" filename="GstCameraPlugin">
++          <udp_host>127.0.0.1</udp_host>
++          <udp_port>5600</udp_port>
++          <use_basic_pipeline>true</use_basic_pipeline>
++          <use_cuda>false</use_cuda>
++        </plugin>
++      </sensor>
+     </link>
+     <link name='imu_link'>
+       <inertial>
+@@ -269,8 +154,15 @@
+         </dynamics>
+       </axis>
+     </joint>
++    <!-- rotor positions measured from the flightstack.STL's own baked-in
++         propeller clusters (108/142.6mm half-spans from the vehicle's true
++         rotational center) - see patches/iris-flightstack-body.patch notes.
++         Visuals removed: the STL already shows static propeller blades at
++         these exact positions, so the old separate spinning DAE props
++         would double-render on top of them. Collision (prop-strike disc)
++         kept. -->
+     <link name='rotor_0'>
+-      <pose>0.13 -0.22 0.023 0 0 0</pose>
++      <pose>0.10795 -0.14355 0.10635 0 0 0</pose>
+       <inertial>
+         <pose>0 0 0 0 0 0</pose>
+         <mass>0.025</mass>
+@@ -292,26 +184,6 @@
+           </cylinder>
+         </geometry>
+       </collision>
+-      <visual name='visual'>
+-        <pose>0 0 0 0 0 0</pose>
+-        <geometry>
+-          <mesh>
+-            <scale>1 1 1</scale>
+-            <uri>model://iris_with_standoffs/meshes/iris_prop_ccw.dae</uri>
+-          </mesh>
+-        </geometry>
+-        <material>
+-          <ambient>0 0 1</ambient>
+-          <diffuse>0 0 1</diffuse>
+-          <specular>1 1 1 1</specular>
+-          <pbr>
+-            <metal>
+-              <metalness>0.5</metalness>
+-              <roughness>0.5</roughness>
+-            </metal>
+-          </pbr>
+-        </material>
+-      </visual>
+     </link>
+     <joint name='rotor_0_joint' type='revolute'>
+       <child>rotor_0</child>
+@@ -328,7 +200,7 @@
+       </axis>
+     </joint>
+     <link name='rotor_1'>
+-      <pose>-0.13 0.2 0.023 0 0 0</pose>
++      <pose>-0.10795 0.14355 0.10635 0 0 0</pose>
+       <inertial>
+         <pose>0 0 0 0 0 0</pose>
+         <mass>0.025</mass>
+@@ -350,26 +222,6 @@
+           </cylinder>
+         </geometry>
+       </collision>
+-      <visual name='visual'>
+-        <pose>0 0 0 0 0 0</pose>
+-        <geometry>
+-          <mesh>
+-            <scale>1 1 1</scale>
+-            <uri>model://iris_with_standoffs/meshes/iris_prop_ccw.dae</uri>
+-          </mesh>
+-        </geometry>
+-        <material>
+-          <ambient>0 0 1 1</ambient>
+-          <diffuse>0 0 1 1</diffuse>
+-          <specular>1 1 1 1</specular>
+-          <pbr>
+-            <metal>
+-              <metalness>0.5</metalness>
+-              <roughness>0.5</roughness>
+-            </metal>
+-          </pbr>
+-        </material>
+-      </visual>
+     </link>
+     <joint name='rotor_1_joint' type='revolute'>
+       <child>rotor_1</child>
+@@ -386,7 +238,7 @@
+       </axis>
+     </joint>
+     <link name='rotor_2'>
+-      <pose>0.13 0.22 0.023 0 0 0</pose>
++      <pose>0.10795 0.14355 0.10635 0 0 0</pose>
+       <inertial>
+         <pose>0 0 0 0 0 0</pose>
+         <mass>0.025</mass>
+@@ -408,26 +260,6 @@
+           </cylinder>
+         </geometry>
+       </collision>
+-      <visual name='visual'>
+-        <pose>0 0 0 0 0 0</pose>
+-        <geometry>
+-          <mesh>
+-            <scale>1 1 1</scale>
+-            <uri>model://iris_with_standoffs/meshes/iris_prop_cw.dae</uri>
+-          </mesh>
+-        </geometry>
+-        <material>
+-          <ambient>0 1 0</ambient>
+-          <diffuse>0 1 0</diffuse>
+-          <specular>1 1 1 1</specular>
+-          <pbr>
+-            <metal>
+-              <metalness>0.5</metalness>
+-              <roughness>0.5</roughness>
+-            </metal>
+-          </pbr>
+-        </material>
+-      </visual>
+     </link>
+     <joint name='rotor_2_joint' type='revolute'>
+       <child>rotor_2</child>
+@@ -444,7 +276,7 @@
+       </axis>
+     </joint>
+     <link name='rotor_3'>
+-      <pose>-0.13 -0.2 0.023 0 0 0</pose>
++      <pose>-0.10795 -0.14355 0.10635 0 0 0</pose>
+       <inertial>
+         <pose>0 0 0 0 0 0</pose>
+         <mass>0.025</mass>
+@@ -466,26 +298,6 @@
+           </cylinder>
+         </geometry>
+       </collision>
+-      <visual name='visual'>
+-        <pose>0 0 0 0 0 0</pose>
+-        <geometry>
+-          <mesh>
+-            <scale>1 1 1</scale>
+-            <uri>model://iris_with_standoffs/meshes/iris_prop_cw.dae</uri>
+-          </mesh>
+-        </geometry>
+-        <material>
+-          <ambient>0 1 0</ambient>
+-          <diffuse>0 1 0</diffuse>
+-          <specular>1 1 1 1</specular>
+-          <pbr>
+-            <metal>
+-              <metalness>0.5</metalness>
+-              <roughness>0.5</roughness>
+-            </metal>
+-          </pbr>
+-        </material>
+-      </visual>
+     </link>
+     <joint name='rotor_3_joint' type='revolute'>
+       <child>rotor_3</child>
+diff --git a/worlds/iris_runway.sdf b/worlds/iris_runway.sdf
+index 259ac71..39e0ef0 100755
+--- a/worlds/iris_runway.sdf
++++ b/worlds/iris_runway.sdf
+@@ -117,7 +117,7 @@
+ 
+     <include>
+       <uri>model://iris_with_gimbal</uri>
+-      <pose degrees="true">0 0 0.195 0 0 90</pose>
++      <pose degrees="true">0 0 0.01 0 0 90</pose>
+     </include>
+ 
+   </world>

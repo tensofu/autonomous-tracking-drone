@@ -1,0 +1,43 @@
+<?xml version="1.0"?>
+<sdf version="1.9">
+  <model name="landing_dock">
+    <static>true</static>
+    <link name="base">
+      <collision name="platform_col">
+        <geometry>
+          <box><size>2.6 2.6 0.3</size></box>
+        </geometry>
+      </collision>
+      <visual name="platform">
+        <geometry>
+          <box><size>2.6 2.6 0.3</size></box>
+        </geometry>
+        <material>
+          <ambient>0.9 0.9 0.92 1</ambient>
+          <diffuse>0.95 0.95 0.97 1</diffuse>
+          <specular>0.1 0.1 0.1 1</specular>
+        </material>
+      </visual>
+      <!-- thin tag face lying on the platform top; the albedo map paints
+           the AprilTag across each face, and only the top is ever seen -->
+      <visual name="apriltag">
+        <pose>0 0 0.1505 0 0 0</pose>
+        <geometry>
+          <box><size>1.2 1.2 0.001</size></box>
+        </geometry>
+        <material>
+          <ambient>1 1 1 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0 0 0 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>materials/textures/apriltag_36h11_id0.png</albedo_map>
+              <metalness>0.0</metalness>
+              <roughness>1.0</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+    </link>
+  </model>
+</sdf>
