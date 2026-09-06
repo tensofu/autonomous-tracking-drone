@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<sdf version="1.9">
+  <model name="flightstack">
+    <static>true</static>
+    <link name="base">
+      <!-- collision: bounding-box approximation (0.251 x 0.149 x 0.322 m)
+           of the real mesh - a static trimesh collision would work too,
+           but the box is cheap and sufficient for a reference prop -->
+      <collision name="col">
+        <pose>0.126 0.075 0.161 0 0 0</pose>
+        <geometry>
+          <box><size>0.251 0.149 0.322</size></box>
+        </geometry>
+      </collision>
+      <visual name="visual">
+        <geometry>
+          <mesh>
+            <uri>meshes/flightstack.stl</uri>
+            <scale>0.001 0.001 0.001</scale>
+          </mesh>
+        </geometry>
+        <material>
+          <ambient>0.55 0.55 0.58 1</ambient>
+          <diffuse>0.6 0.6 0.63 1</diffuse>
+          <specular>0.3 0.3 0.3 1</specular>
+        </material>
+      </visual>
+    </link>
+  </model>
+</sdf>

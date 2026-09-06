@@ -34,20 +34,12 @@ if os.environ.get("DYLD_LIBRARY_PATH"):
     env = {k: v for k, v in os.environ.items() if k != "DYLD_LIBRARY_PATH"}
     os.execve(sys.executable, [sys.executable] + sys.argv, env)
 
-# camera feed: let OpenCV's FFmpeg accept the RTP-over-UDP stream described
-# by the .sdp file, and silence its join-time decoder chatter
-os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS",
-                      "protocol_whitelist;file,rtp,udp")
-os.environ.setdefault("OPENCV_FFMPEG_LOGLEVEL", "-8")
-try:
-    import cv2
-except ImportError:
-    cv2 = None
-
 import pygame
 from pymavlink import mavutil
 
 from drone_control import DroneController, CommandError, CommandAborted
+import missions
+from vision import FrameSource            # imports cv2, sets FFmpeg env vars
 
 # ----------------------------------------------------------------- config --
 
@@ -81,13 +73,6 @@ def _spiral(radius, alt_from, alt_to, points=16):
 
 
 # gimbal camera on the iris_with_gimbal model in the iris_runway world
-CAMERA_ENABLE_TOPIC = ("/world/iris_runway/model/iris_with_gimbal/model/"
-                       "gimbal/link/pitch_link/sensor/camera/image/"
-                       "enable_streaming")
-SDP_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                        "camera_stream.sdp")
-SDP_BODY = "c=IN IP4 127.0.0.1\nm=video 5600 RTP/AVP 96\na=rtpmap:96 H264/90000\n"
-
 FLIGHT_PATHS = [
     ("Square 20 m", 10, [(20, 0, 10), (20, 20, 10), (0, 20, 10), (0, 0, 10)]),
     ("Triangle", 10, [(24, 0, 10), (12, 20, 10), (0, 0, 10)]),
@@ -277,72 +262,6 @@ class CommandWorker(threading.Thread):
                 self.busy, self.progress = "", ""
 
 
-class CameraFeed(threading.Thread):
-    """Receives the Gazebo camera's H.264/RTP stream via OpenCV and hands
-    decoded frames to the CameraPanel. Enables streaming on the Gazebo side
-    itself, and reconnects if the stream (or the sim) goes away."""
-
-    def __init__(self, panel, log):
-        super().__init__(daemon=True)
-        self.panel = panel
-        self.log = log
-
-    def _enable_streaming(self):
-        env = {**os.environ, "GZ_IP": "127.0.0.1"}
-        try:
-            subprocess.run(["gz", "topic", "-t", CAMERA_ENABLE_TOPIC,
-                            "-m", "gz.msgs.Boolean", "-p", "data: true"],
-                           env=env, capture_output=True, timeout=10)
-        except (OSError, subprocess.TimeoutExpired):
-            pass                    # sim not up yet; the retry loop handles it
-
-    def run(self):
-        if cv2 is None:
-            self.log.put("camera: opencv-python not installed - feed disabled")
-            return
-        if not os.path.exists(SDP_FILE):
-            with open(SDP_FILE, "w") as f:
-                f.write(SDP_BODY)
-        announced = False
-        while True:
-            self._enable_streaming()
-            cap = cv2.VideoCapture(SDP_FILE, cv2.CAP_FFMPEG)
-            if not cap.isOpened():
-                cap.release()
-                if not announced:
-                    self.log.put("camera: waiting for stream ...")
-                    announced = True
-                time.sleep(3)
-                continue
-            announced = False
-            self.log.put("camera: stream opened")
-            self._pump(cap)
-            cap.release()
-            self.panel.set_frame(None)
-            self.log.put("camera: stream lost - reconnecting ...")
-
-    def _pump(self, cap):
-        frames = 0
-        fps, counted, window_start = 0.0, 0, time.time()
-        while True:
-            ok, frame = cap.read()
-            if not ok:
-                return
-            frames += 1
-            counted += 1
-            now = time.time()
-            if now - window_start >= 1.0:
-                fps = counted / (now - window_start)
-                counted, window_start = 0, now
-            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            surface = pygame.image.frombuffer(
-                rgb.tobytes(), (frame.shape[1], frame.shape[0]), "RGB")
-            self.panel.set_frame(
-                surface.copy(),
-                f"{frame.shape[1]}x{frame.shape[0]}  "
-                f"{fps:4.1f} fps  frame {frames}")
-
-
 def fly_path(name, takeoff_alt, waypoints):
     def action(drone, aborted):
         if not drone.is_flying():
@@ -439,12 +358,12 @@ class App:
         self.worker.start()
 
         self.camera = CameraPanel((790, 40, 470, 300))
-        self.camera_feed = CameraFeed(self.camera, self.log_queue)
-        self.camera_feed.start()
+        self.feed = FrameSource(log=self.log_queue.put)
+        self.feed.start()
         self.buttons = self._make_buttons()
         self.path_rects = []       # filled in draw, used for click hits
         self.log_file = open("gcs.log", "a", buffering=1)
-        self.copy_button = Button((1176, 466, 72, 22), "COPY",
+        self.copy_button = Button((1176, 492, 72, 22), "COPY",
                                   self._copy_log, (72, 72, 72))
         self.clear_button = Button((686, 46, 72, 22), "CLEAR",
                                    self.telemetry.clear_trail, (72, 72, 72))
@@ -455,25 +374,37 @@ class App:
         subprocess.run(["pbcopy"], input=text.encode())
         self.copy_flash = time.time()
 
+    def _get_dets(self):
+        """Adapter for missions: (detections, age_seconds)."""
+        _, dets, age = self.feed.latest()
+        return dets, age
+
     # ------------------------------------------------------------ actions --
 
     def _make_buttons(self):
         w = self.worker
+        get_dets = self._get_dets
         def simple(label, fn, interrupts=False):
             return lambda: w.submit(label, fn, interrupts)
         specs = [
             ("ARM",     simple("arm", lambda d, a: d.arm(abort=a)), ACCENT),
             ("TAKEOFF", simple("takeoff", lambda d, a: d.takeoff(10, abort=a)), ACCENT),
+            ("FOLLOW",  simple("follow person",
+                               lambda d, a: missions.follow_person(
+                                   d, get_dets, abort=a), True), ACCENT),
+            ("DOCK",    simple("dock landing",
+                               lambda d, a: missions.dock_land(
+                                   d, get_dets, abort=a), True), ACCENT),
             ("HOME",    simple("return home",
-                               lambda d, a: d.return_home(abort=a), True), ACCENT),
+                               lambda d, a: d.return_home(abort=a), True), WARN),
             ("HOLD",    simple("hold", lambda d, a: d.hold(), True), WARN),
             ("LAND",    simple("land", lambda d, a: d.land(), True), WARN),
             ("RTL",     simple("rtl", lambda d, a: d.rtl(), True), WARN),
             ("DISARM",  simple("disarm", lambda d, a: d.disarm(), True), BAD),
         ]
-        buttons, x, y = [], 790, 360
+        buttons, x, y = [], 790, 352
         for i, (label, cb, color) in enumerate(specs):
-            rect = (x + (i % 4) * 119, y + (i // 4) * 46, 111, 38)
+            rect = (x + (i % 4) * 119, y + (i // 4) * 44, 111, 36)
             buttons.append(Button(rect, label, cb, color))
         return buttons
 
@@ -619,19 +550,33 @@ class App:
             y += 38
 
     def _draw_log(self):
-        rect = pygame.Rect(790, 460, 470, 320)
+        rect = pygame.Rect(790, 486, 470, 294)
         self._panel(rect, "LOG (full history in gcs.log)")
         copied = time.time() - self.copy_flash < 1.5
         self.copy_button.label = "COPIED" if copied else "COPY"
-        self.copy_button.color = GOOD if copied else (60, 68, 88)
+        self.copy_button.color = GOOD if copied else (72, 72, 72)
         self.copy_button.draw(self.screen, self.small)
         y = rect.bottom - 22
-        for line in reversed(self.log_lines[-20:]):
+        for line in reversed(self.log_lines[-18:]):
             self.screen.blit(self.small.render(line[:64], True, DIM),
                              (rect.left + 12, y))
             y -= 15
             if y < rect.top + 28:
                 break
+
+    def _update_camera_panel(self):
+        annotated, dets, age = self.feed.latest()
+        if annotated is None or age > 3.0:
+            self.camera.set_frame(None)
+            return
+        rgb = annotated[:, :, ::-1]        # BGR -> RGB view
+        surface = pygame.image.frombuffer(
+            rgb.tobytes(), (annotated.shape[1], annotated.shape[0]), "RGB")
+        counts = " ".join(f"{k}:{len(v)}" for k, v in dets.items() if v)
+        self.camera.set_frame(
+            surface, f"{annotated.shape[1]}x{annotated.shape[0]}  "
+                     f"{self.feed.fps:4.1f} fps  frame {self.feed.frames}  "
+                     f"{counts}")
 
     # --------------------------------------------------------------- loop --
 
@@ -659,6 +604,7 @@ class App:
             self._draw_attitude()
             self._draw_map()
             self._draw_paths()
+            self._update_camera_panel()
             self.camera.draw(self.screen, self.font, self.small)
             for button in self.buttons:
                 button.draw(self.screen, self.font)

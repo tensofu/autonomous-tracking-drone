@@ -293,6 +293,46 @@ class DroneController:
         self._say("  returning to origin ...")
         self.goto(0, 0, alt, abort=abort)
 
+    def send_body_velocity(self, vx, vy, vz, yaw_rate=0.0):
+        """One velocity setpoint in the body frame (m/s; vz positive DOWN,
+        yaw_rate rad/s positive clockwise). GUIDED mode only. ArduPilot
+        times these out after ~3 s, so control loops must re-send
+        continuously (a few Hz is fine)."""
+        type_mask = 0b0000_0101_1100_0111   # use velocity + yaw rate only
+        self.master.mav.set_position_target_local_ned_send(
+            0, self.master.target_system, self.master.target_component,
+            mavutil.mavlink.MAV_FRAME_BODY_OFFSET_NED,
+            type_mask, 0, 0, 0, vx, vy, vz, 0, 0, 0, 0, yaw_rate)
+
+    def send_position_target(self, north, east, alt):
+        """One absolute position setpoint (NED metres; alt is height above
+        home). GUIDED mode only. Like send_body_velocity, meant to be
+        streamed continuously from a control loop - but unlike a velocity
+        command, ArduPilot's own tuned position controller does the
+        smoothing/damping here, which converges far less oscillatory than
+        a hand-rolled velocity controller reacting to noisy vision every
+        frame. Good fit for homing in on a fixed target (e.g. the dock's
+        AprilTag); a moving target still needs velocity control."""
+        type_mask = 0b0000_1111_1111_1000   # position only
+        self.master.mav.set_position_target_local_ned_send(
+            0, self.master.target_system, self.master.target_component,
+            mavutil.mavlink.MAV_FRAME_LOCAL_NED,
+            type_mask, north, east, -alt, 0, 0, 0, 0, 0, 0, 0, 0)
+
+    def yaw_to(self, heading_deg, rate_dps=30):
+        """Rotate to an absolute heading (degrees) in GUIDED mode."""
+        self.master.mav.command_long_send(
+            self.master.target_system, self.master.target_component,
+            mavutil.mavlink.MAV_CMD_CONDITION_YAW, 0,
+            heading_deg, rate_dps, 1, 0, 0, 0, 0)
+
+    def rangefinder_m(self):
+        """Latest downward rangefinder reading in metres, or None."""
+        self.drain()
+        msg = self.master.recv_match(type='DISTANCE_SENSOR',
+                                     blocking=True, timeout=2)
+        return msg.current_distance / 100.0 if msg else None
+
 
 def demo(drone):
     """Takeoff, fly a 20 m square, land."""
